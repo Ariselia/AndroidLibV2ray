@@ -5,7 +5,7 @@ pb:
 asset:
 	mkdir assets
 	cd assets;curl https://cdn.rawgit.com/v2ray/v2ray-core/e60de73c704d46d91633035e6b06184f7186a4e0/tools/release/config/geosite.dat > geosite.dat
-	cd assets;curl https://cdn.rawgit.com/v2ray/v2ray-core/v3.1/tools/release/config/geoip.dat > geoip.dat
+	cd assets;curl https://cdn.rawgit.com/v2ray/v2ray-core/1777540e3d9eb7429c1ba72a93d8ef6c426bda13/release/config/geoip.dat > geoip.dat
 
 shippedBinary:
 	cd shippedBinarys; $(MAKE) shippedBinary
@@ -16,6 +16,8 @@ fetchDep:
 	go get -u github.com/xiaokangwang/V2RayConfigureFileUtil
 	-go get -u github.com/xiaokangwang/AndroidLibV2ray
 	-cd $(GOPATH)/src/github.com/xiaokangwang/libV2RayAuxiliaryURL; $(MAKE) all
+	-go get -u github.com/xiaokangwang/AndroidLibV2ray
+	-cd $(GOPATH)/src/github.com/xiaokangwang/waVingOcean/configure; $(MAKE) pb
 	go get -u github.com/xiaokangwang/AndroidLibV2ray
 
 ANDROID_HOME=$(HOME)/android-sdk-linux

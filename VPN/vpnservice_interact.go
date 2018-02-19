@@ -1,12 +1,19 @@
 package VPN
 
 import (
+	"context"
+	"os"
+	"syscall"
+
 	"github.com/xiaokangwang/AndroidLibV2ray/CoreI"
 	"github.com/xiaokangwang/AndroidLibV2ray/Process/Escort"
 	"github.com/xiaokangwang/AndroidLibV2ray/configure"
+	"github.com/xiaokangwang/waVingOcean"
+	voconfigure "github.com/xiaokangwang/waVingOcean/configure"
 
 	"golang.org/x/sys/unix"
 
+	"v2ray.com/core"
 	"v2ray.com/core/transport/internet"
 )
 
@@ -26,10 +33,14 @@ func (v *VPNSupport) VpnSupportReady() {
 	}
 }
 func (v *VPNSupport) startVPNRequire() {
-	v.Estr = Escort.NewEscort()
-	v.Estr.SetStatus(v.status)
-	v.Estr.EscortingUPV()
-	go v.Estr.EscortRun(v.Conf.Service.Target, v.Conf.Service.Args, false, v.VpnSupportSet.GetVPNFd())
+	if !v.usewaVingOceanVPNBackend {
+		v.Estr = Escort.NewEscort()
+		v.Estr.SetStatus(v.status)
+		v.Estr.EscortingUPV()
+		go v.Estr.EscortRun(v.Conf.Service.Target, v.Conf.Service.Args, false, v.VpnSupportSet.GetVPNFd())
+	} else {
+		v.startNextGen()
+	}
 }
 
 func (v *VPNSupport) askSupportSetInit() {
@@ -59,7 +70,12 @@ func (v *VPNSupport) VpnShutdown() {
 		println(err)
 		//}
 		v.VpnSupportSet.Shutdown()
-		v.Estr.EscortingDown()
+		if !v.usewaVingOceanVPNBackend {
+			v.Estr.EscortingDown()
+		} else {
+			v.stopNextGen()
+		}
+
 	}
 	v.status.VpnSupportnodup = false
 }
@@ -70,11 +86,33 @@ func (v *VPNSupport) setV2RayDialer() {
 }
 
 type VPNSupport struct {
-	prepareddomain preparedDomain
-	VpnSupportSet  V2RayVPNServiceSupportsSet
-	status         *CoreI.Status
-	Conf           configure.VPNConfig
-	Estr           *Escort.Escorting
+	prepareddomain           preparedDomain
+	VpnSupportSet            V2RayVPNServiceSupportsSet
+	status                   *CoreI.Status
+	Conf                     configure.VPNConfig
+	Estr                     *Escort.Escorting
+	usewaVingOceanVPNBackend bool
+	lowerup                  *wavingocean.LowerUp
+}
+
+func (v *VPNSupport) startNextGen() {
+	tapfd := v.VpnSupportSet.GetVPNFd()
+	syscall.SetNonblock(tapfd, false)
+	f := os.NewFile(uintptr(tapfd), "/dev/tap0")
+	cfg := new(voconfigure.WaVingOceanConfigure)
+	cfg.PublicOnly = false
+	cfg.EnableDnsCache = false
+	cfg.DNSServers = make([]string, 0)
+	v.lowerup = wavingocean.NewLowerUp(*cfg, f, &V2Dialer{ser: v.status.Vpoint.(*core.Instance)}, context.TODO())
+	go v.lowerup.Up()
+}
+
+func (v *VPNSupport) OptinNextGenerationTunInterface() {
+	v.usewaVingOceanVPNBackend = true
+}
+
+func (v *VPNSupport) stopNextGen() {
+	v.lowerup.Down()
 }
 
 type V2RayVPNServiceSupportsSet interface {

@@ -34,6 +34,9 @@ This is territory of Go, so no getter and setters!
 Notice:
 ConfigureFile can be either the path of config file or
 "V2Ray_internal/ConfigureFileContent" in case you wish to
+provide configure file with @[ConfigureFileContent] in JSON
+format or "V2Ray_internal/AsPbConfigureFileContent"
+in protobuf format.
 
 */
 type V2RayPoint struct {
@@ -68,20 +71,34 @@ func (v *V2RayPoint) pointloop() {
 	//TODO:Parse Configure File
 	//Deal with legacy API
 	var config core.Config
-	if v.ConfigureFile == "V2Ray_internal/ConfigureFileContent" {
-		//Convert is needed
-		jc := &jsonConvert.JsonToPbConverter{}
-		jc.Datadir = v.status.PackageName
-		//Load File From Context
-		//cf := v.Context.GetConfigureFile()
-		jc.LoadFromString(v.ConfigureFileContent)
-		jc.Parse()
-		v.confng = jc.ToPb()
-		configx, err := v2rayconf.LoadJSONConfig(strings.NewReader(v.ConfigureFileContent))
-		if err != nil {
-				log.Println("JSON Parse Err:" + err.Error())
+	if strings.HasPrefix(v.ConfigureFile, "V2Ray_internal") {
+		if v.ConfigureFile == "V2Ray_internal/ConfigureFileContent" {
+			//Convert is needed
+			jc := &jsonConvert.JsonToPbConverter{}
+			jc.Datadir = v.status.PackageName
+			//Load File From Context
+			//cf := v.Context.GetConfigureFile()
+			jc.LoadFromString(v.ConfigureFileContent)
+			jc.Parse()
+			v.confng = jc.ToPb()
+			configx, _ := v2rayconf.LoadJSONConfig(strings.NewReader(v.ConfigureFileContent))
+			config = *configx
+		} else {
+			buf := []byte(v.ConfigureFileContent)
+			err := proto.Unmarshal(buf, &config)
+			if err != nil {
+				log.Println(err)
 			}
-		config = *configx
+			//Assert V2RayPart
+			for _, a := range config.GetExtension() {
+				d, _ := a.GetInstance()
+				switch vn := d.(type) {
+				case *configure.LibV2RayConf:
+					v.confng = vn
+				default:
+				}
+			}
+		}
 	} else {
 		//First Guess File type
 		Type, err := vlencoding.GuessConfigType(v.Context.GetConfigureFile())
@@ -273,7 +290,13 @@ func NewV2RayPoint() *V2RayPoint {
 	//Now we handle read
 	sysio.NewFileReader = func(path string) (io.ReadCloser, error) {
 		if strings.HasPrefix(path, assetperfix) {
-			return mobasset.Open(path[len(assetperfix)+1:])
+			p := path[len(assetperfix)+1:]
+			//is it overridden?
+			by, ok := overridedAssets[p]
+			if ok {
+				return os.Open(by)
+			}
+			return mobasset.Open(p)
 		}
 		return os.Open(path)
 	}
@@ -342,4 +365,8 @@ func (v *V2RayPoint) VpnSupportReady() {
 //Delegate Funcation
 func (v *V2RayPoint) SetVpnSupportSet(vs V2RayVPNServiceSupportsSet) {
 	v.VPNSupports.VpnSupportSet = vs
+}
+
+func (v *V2RayPoint) OptinNextGenerationTunInterface() {
+	v.VPNSupports.OptinNextGenerationTunInterface()
 }
